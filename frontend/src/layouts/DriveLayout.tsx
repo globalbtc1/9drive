@@ -157,8 +157,8 @@ export function DriveLayout() {
 
   return (
     <main className="min-h-screen bg-white">
-      <div className="flex min-h-screen flex-col bg-white lg:flex-row">
-        <div className="hidden lg:block">
+      <div className="flex min-h-screen flex-col bg-white lg:h-screen lg:overflow-hidden lg:flex-row">
+        <div className="hidden lg:block lg:h-screen lg:shrink-0">
           <Sidebar user={user} storage={storage} breakdown={breakdown} onLogout={logout} />
         </div>
         <div className={cn('fixed inset-0 z-40 bg-slate-950/40 transition-opacity lg:hidden', sidebarOpen ? 'opacity-100' : 'pointer-events-none opacity-0')} onClick={() => setSidebarOpen(false)} />
@@ -170,7 +170,7 @@ export function DriveLayout() {
           </div>
           <Sidebar user={user} storage={storage} breakdown={breakdown} onLogout={logout} onNavigate={() => setSidebarOpen(false)} />
         </div>
-        <section className="flex-1 p-5 sm:p-8 lg:p-10">
+        <section className="flex-1 p-5 sm:p-8 lg:h-screen lg:overflow-y-auto lg:p-10">
           <header className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
             <div className="flex items-center gap-3 lg:hidden">
               <Button variant="outline" size="icon" aria-label="Open sidebar" onClick={() => setSidebarOpen(true)}>
