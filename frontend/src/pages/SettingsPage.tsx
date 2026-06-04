@@ -13,6 +13,7 @@ export function SettingsPage() {
   const [accounts, setAccounts] = useState<ConnectedAccount[]>([])
   const [message, setMessage] = useState('')
   const [connecting, setConnecting] = useState(false)
+  const [syncingAccountId, setSyncingAccountId] = useState<string | null>(null)
 
   async function load() {
     const data = await apiFetch<{ accounts: ConnectedAccount[] }>('/connected-accounts')
@@ -48,8 +49,13 @@ export function SettingsPage() {
   }
 
   async function sync(accountId: string) {
-    await apiFetch(`/connected-accounts/${accountId}/sync-quota`, { method: 'POST' })
-    await load()
+    setSyncingAccountId(accountId)
+    try {
+      await apiFetch(`/connected-accounts/${accountId}/sync-quota`, { method: 'POST' })
+      await load()
+    } finally {
+      setSyncingAccountId(null)
+    }
   }
 
   async function disconnect(accountId: string) {
@@ -88,7 +94,7 @@ export function SettingsPage() {
                 <div key={account.id} className="rounded-xl bg-slate-50 p-4">
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div><p className="font-semibold">{account.email}</p><p className="text-sm text-slate-500">{account.status}</p></div>
-                    <div className="flex gap-2"><Button variant="outline" onClick={() => sync(account.id)}><RefreshCw className="h-4 w-4" />Sync</Button><Button variant="danger" onClick={() => disconnect(account.id)}><Trash2 className="h-4 w-4" />Disconnect</Button></div>
+                    <div className="flex gap-2"><Button variant="outline" onClick={() => sync(account.id)} disabled={syncingAccountId === account.id}><RefreshCw className={syncingAccountId === account.id ? 'h-4 w-4 animate-spin' : 'h-4 w-4'} />{syncingAccountId === account.id ? 'Syncing...' : 'Sync'}</Button><Button variant="danger" onClick={() => disconnect(account.id)}><Trash2 className="h-4 w-4" />Disconnect</Button></div>
                   </div>
                   <p className="mt-3 text-sm text-slate-500">{formatBytes(account.storageAccount?.usedBytes)} used of {formatBytes(account.storageAccount?.totalBytes)}. Available {formatBytes(account.storageAccount?.availableBytes)}.</p>
                 </div>

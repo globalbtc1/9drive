@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react'
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import {
   Bell,
-  Crown,
   FileArchive,
   Gauge,
   HardDrive,
@@ -91,7 +90,6 @@ function Sidebar({ onNavigate, user, storage, breakdown, onLogout }: { onNavigat
         <NavLink to="/settings" onClick={onNavigate} className={({ isActive }) => cn('inline-flex h-11 w-full items-center gap-2 rounded-xl px-4 text-sm font-semibold transition-all', isActive ? 'bg-slate-100 text-slate-950 shadow-sm' : 'text-slate-700 hover:bg-slate-100')}>
           <Settings className="h-5 w-5" />Setting
         </NavLink>
-        <Button variant="danger" className="w-full justify-start" onClick={onLogout}><LogOut className="h-5 w-5" />Log Out</Button>
       </div>
 
       <Card className="mt-6 p-4 lg:mt-auto">
@@ -104,7 +102,7 @@ function Sidebar({ onNavigate, user, storage, breakdown, onLogout }: { onNavigat
         <div className="mt-4 border-t border-slate-200 pt-4 text-sm">
           <p><b>{formatBytes(storage?.usedBytes)}</b> used of <span className="text-slate-500">{formatBytes(storage?.totalBytes)}</span></p>
           <div className="my-3 h-1.5 rounded-full bg-slate-100"><div className="h-full rounded-full bg-blue-600" style={{ width: `${progress}%` }} /></div>
-          <Button variant="outline" className="w-full"><Crown className="h-4 w-4" />Upgrade Premium</Button>
+          <Button variant="danger" className="mt-4 w-full justify-start" onClick={onLogout}><LogOut className="h-5 w-5" />Log Out</Button>
         </div>
       </Card>
     </aside>
@@ -188,7 +186,6 @@ export function DriveLayout() {
             </div>
             <div className="flex flex-wrap gap-3">
               <Button variant="outline" size="icon" aria-label="Notifications"><Bell className="h-5 w-5" /></Button>
-              <Button><Crown className="h-4 w-4" />Upgrade For 100GB</Button>
               <Button variant="outline" onClick={() => setInviteOpen(true)}><UserPlus className="h-5 w-5" />Invite Members</Button>
             </div>
           </header>

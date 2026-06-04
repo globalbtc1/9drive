@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent, type MouseEvent } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { Archive, CheckCircle, ChevronDown, Folder, FolderPlus, LayoutGrid, List, MoreVertical, Star, Upload, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -32,6 +33,8 @@ function mapFolder(folder: BackendFolder): FolderItem {
 }
 
 export function AllFilesPage() {
+  const [searchParams, setSearchParams] = useSearchParams()
+  const activeFolderId = searchParams.get('folderId')
   const [uploadOpen, setUploadOpen] = useState(false)
   const [folderOpen, setFolderOpen] = useState(false)
   const [renameOpen, setRenameOpen] = useState(false)
@@ -49,7 +52,7 @@ export function AllFilesPage() {
   const [renameValue, setRenameValue] = useState('')
   const [folderRenameValue, setFolderRenameValue] = useState('')
   const [activeFile, setActiveFile] = useState<FileItem | null>(null)
-  const [activeFolder, setActiveFolder] = useState<FolderItem | null>(null)
+  const [activeFolderForMenu, setActiveFolderForMenu] = useState<FolderItem | null>(null)
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; file: FileItem | null }>({ x: 0, y: 0, file: null })
   const [folderContextMenu, setFolderContextMenu] = useState<{ x: number; y: number; folder: FolderItem | null }>({ x: 0, y: 0, folder: null })
   const [message, setMessage] = useState('')
@@ -57,7 +60,8 @@ export function AllFilesPage() {
   const [uploadProgress, setUploadProgress] = useState<{ open: boolean; fileName: string; percent: number; status: 'uploading' | 'done' | 'error' }>({ open: false, fileName: '', percent: 0, status: 'uploading' })
 
   async function loadFiles() {
-    const data = await apiFetch<{ files: BackendFile[] }>('/files')
+    const path = activeFolderId ? `/files?folderId=${activeFolderId}` : '/files'
+    const data = await apiFetch<{ files: BackendFile[] }>(path)
     setFiles(data.files.map(mapFile))
   }
 
@@ -72,7 +76,7 @@ export function AllFilesPage() {
 
   useEffect(() => {
     loadAll().catch((error) => setMessage(error instanceof Error ? error.message : 'Failed to load files'))
-  }, [])
+  }, [activeFolderId])
 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
@@ -101,7 +105,8 @@ export function AllFilesPage() {
       form.append('sizeBytes', String(selectedFile.size))
       form.append('fileName', selectedFile.name)
       form.append('mimeType', selectedFile.type || 'application/octet-stream')
-      if (selectedFolderId) form.append('folderId', selectedFolderId)
+      const targetFolderId = activeFolderId || selectedFolderId
+      if (targetFolderId) form.append('folderId', targetFolderId)
       form.append('file', selectedFile)
       setUploadProgress({ open: true, fileName: selectedFile.name, percent: 0, status: 'uploading' })
       await uploadWithProgress(form, (percent) => setUploadProgress((current) => ({ ...current, percent })))
@@ -152,8 +157,17 @@ export function AllFilesPage() {
   function openFolderMenu(event: MouseEvent<HTMLElement>, folder: FolderItem) {
     event.preventDefault()
     event.stopPropagation()
-    setActiveFolder(folder)
+    setActiveFolderForMenu(folder)
     setFolderContextMenu({ x: event.clientX, y: event.clientY, folder })
+  }
+
+  function openFolder(folder: FolderItem) {
+    if (!folder.id) return
+    setSearchParams({ folderId: folder.id })
+  }
+
+  function closeFolder() {
+    setSearchParams({})
   }
 
   async function viewFile() {
@@ -208,15 +222,15 @@ export function AllFilesPage() {
 
   async function renameFolder(event: FormEvent) {
     event.preventDefault()
-    if (!activeFolder?.id) return
-    await apiFetch(`/folders/${activeFolder.id}`, { method: 'PATCH', body: JSON.stringify({ name: folderRenameValue }) })
+    if (!activeFolderForMenu?.id) return
+    await apiFetch(`/folders/${activeFolderForMenu.id}`, { method: 'PATCH', body: JSON.stringify({ name: folderRenameValue }) })
     setFolderRenameOpen(false)
     await loadFolders()
   }
 
   async function deleteFolder() {
-    if (!activeFolder?.id) return
-    await apiFetch(`/folders/${activeFolder.id}`, { method: 'DELETE' })
+    if (!activeFolderForMenu?.id) return
+    await apiFetch(`/folders/${activeFolderForMenu.id}`, { method: 'DELETE' })
     setFolderDeleteOpen(false)
     await loadFolders()
   }
@@ -229,25 +243,27 @@ export function AllFilesPage() {
 
   const recentFolders = folders.slice(0, 4)
   const moreFolders = folders.slice(4)
+  const activeFolder = folders.find((folder) => folder.id === activeFolderId)
 
   return (
     <>
-      <PageHeader title="All Files" actions={<><Button variant="outline" onClick={() => setUploadOpen(true)}><Upload className="h-4 w-4" />Upload</Button><Button variant="outline" onClick={() => setFolderOpen(true)}><FolderPlus className="h-4 w-4" />New Folder</Button></>} />
+      <PageHeader title={activeFolder ? `All Files / ${activeFolder.name}` : 'All Files'} actions={<><Button variant="outline" onClick={() => setUploadOpen(true)}><Upload className="h-4 w-4" />Upload</Button><Button variant="outline" onClick={() => setFolderOpen(true)}><FolderPlus className="h-4 w-4" />New Folder</Button></>} />
       {message ? <p className="mt-5 rounded-xl bg-blue-50 p-3 text-sm text-blue-700">{message}</p> : null}
-      {recentFolders.length > 0 ? <FolderGrid items={recentFolders} mobileTwoColumns onFolderMenu={openFolderMenu} /> : <p className="mt-8 rounded-xl bg-slate-50 p-5 text-sm text-slate-500">No folders yet. Click New Folder to organize uploads.</p>}
-      {moreFolders.length > 0 ? <Card className="mt-5 p-5"><h2 className="font-extrabold">More Folders</h2><div className="mt-4 grid gap-3 sm:grid-cols-2">{moreFolders.map((folder) => <div key={folder.id} className="flex items-center justify-between gap-3 rounded-xl bg-slate-50 p-3"><div className="flex items-center gap-3"><Folder className="h-5 w-5 text-blue-600" /><div><p className="font-semibold">{folder.name}</p><p className="text-xs text-slate-500">{folder.updated}</p></div></div><button className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100" onClick={(event) => openFolderMenu(event, folder)} aria-label={`Open ${folder.name} menu`}><MoreVertical className="h-5 w-5" /></button></div>)}</div></Card> : null}
+      {activeFolder ? <Button className="mt-5" variant="outline" onClick={closeFolder}>Back to All Files</Button> : null}
+      {!activeFolder && (recentFolders.length > 0 ? <FolderGrid items={recentFolders} mobileTwoColumns onFolderMenu={openFolderMenu} onFolderOpen={openFolder} /> : <p className="mt-8 rounded-xl bg-slate-50 p-5 text-sm text-slate-500">No folders yet. Click New Folder to organize uploads.</p>)}
+      {!activeFolder && moreFolders.length > 0 ? <Card className="mt-5 p-5"><h2 className="font-extrabold">More Folders</h2><div className="mt-4 grid gap-3 sm:grid-cols-2">{moreFolders.map((folder) => <div key={folder.id} onClick={() => openFolder(folder)} className="flex cursor-pointer items-center justify-between gap-3 rounded-xl bg-slate-50 p-3 hover:bg-slate-100"><div className="flex items-center gap-3"><Folder className="h-5 w-5 text-blue-600" /><div><p className="font-semibold">{folder.name}</p><p className="text-xs text-slate-500">{folder.updated}</p></div></div><button className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-500 hover:bg-white" onClick={(event) => openFolderMenu(event, folder)} aria-label={`Open ${folder.name} menu`}><MoreVertical className="h-5 w-5" /></button></div>)}</div></Card> : null}
       <div className="mt-10 flex items-center justify-between gap-3">
         <div className="flex gap-3"><Button variant="soft"><Archive className="h-4 w-4" />Recents</Button><Button variant="soft"><Star className="h-4 w-4" />Starred</Button></div>
         <div className="hidden gap-3 sm:flex"><Button variant="outline" size="icon"><LayoutGrid className="h-5 w-5" /></Button><Button variant="outline" size="icon"><List className="h-5 w-5" /></Button></div>
       </div>
-      {files.length === 0 ? <p className="mt-5 rounded-xl bg-slate-50 p-5 text-sm text-slate-500">No uploaded files yet. Connect Google Drive in Settings, then upload a file.</p> : <FileTable files={files} onFileContextMenu={openContext} />}
+      {files.length === 0 ? <p className="mt-5 rounded-xl bg-slate-50 p-5 text-sm text-slate-500">{activeFolder ? 'No files in this folder yet.' : 'No uploaded files yet. Connect Google Drive in Settings, then upload a file.'}</p> : <FileTable files={files} onFileContextMenu={openContext} />}
       <FileContextMenu x={contextMenu.x} y={contextMenu.y} file={contextMenu.file} onClose={() => setContextMenu({ x: 0, y: 0, file: null })} onView={viewFile} onDownload={downloadFile} onRename={() => { setRenameValue(activeFile?.name ?? ''); setRenameOpen(true); setContextMenu({ x: 0, y: 0, file: null }) }} onMove={() => { setMoveOpen(true); setContextMenu({ x: 0, y: 0, file: null }) }} onDelete={() => { setDeleteOpen(true); setContextMenu({ x: 0, y: 0, file: null }) }} />
-      <FolderContextMenu x={folderContextMenu.x} y={folderContextMenu.y} folder={folderContextMenu.folder} onClose={() => setFolderContextMenu({ x: 0, y: 0, folder: null })} onRename={() => { setFolderRenameValue(activeFolder?.name ?? ''); setFolderRenameOpen(true); setFolderContextMenu({ x: 0, y: 0, folder: null }) }} onDelete={() => { setFolderDeleteOpen(true); setFolderContextMenu({ x: 0, y: 0, folder: null }) }} />
+      <FolderContextMenu x={folderContextMenu.x} y={folderContextMenu.y} folder={folderContextMenu.folder} onClose={() => setFolderContextMenu({ x: 0, y: 0, folder: null })} onRename={() => { setFolderRenameValue(activeFolderForMenu?.name ?? ''); setFolderRenameOpen(true); setFolderContextMenu({ x: 0, y: 0, folder: null }) }} onDelete={() => { setFolderDeleteOpen(true); setFolderContextMenu({ x: 0, y: 0, folder: null }) }} />
 
       <DummyModal open={uploadOpen} title="Upload File" description="Stream file directly to selected Google Drive account." onClose={() => setUploadOpen(false)}>
         <form onSubmit={uploadFile} className="grid gap-4">
           <label className="grid gap-2 text-sm font-semibold">Choose File<Input type="file" onChange={(event) => setSelectedFile(event.target.files?.[0] ?? null)} required /></label>
-          <label className="grid gap-2 text-sm font-semibold">Virtual Folder<select className="h-11 rounded-xl border border-slate-200 px-3 text-sm" value={selectedFolderId} onChange={(event) => setSelectedFolderId(event.target.value)}><option value="">No folder</option>{folders.map((folder) => <option key={folder.id} value={folder.id}>{folder.name}</option>)}</select></label>
+          {activeFolder ? <p className="rounded-xl bg-slate-50 p-3 text-sm text-slate-600">Uploading to: <b>{activeFolder.name}</b></p> : <label className="grid gap-2 text-sm font-semibold">Virtual Folder<select className="h-11 rounded-xl border border-slate-200 px-3 text-sm" value={selectedFolderId} onChange={(event) => setSelectedFolderId(event.target.value)}><option value="">No folder</option>{folders.map((folder) => <option key={folder.id} value={folder.id}>{folder.name}</option>)}</select></label>}
           {selectedFile ? <p className="rounded-xl bg-slate-50 p-3 text-sm text-slate-600">{selectedFile.name} - {formatBytes(selectedFile.size)}</p> : null}
           <div className="flex justify-end gap-3"><Button type="button" variant="outline" onClick={() => setUploadOpen(false)}>Cancel</Button><Button disabled={loading || !selectedFile}>{loading ? 'Uploading...' : 'Upload'}</Button></div>
         </form>
@@ -261,8 +277,8 @@ export function AllFilesPage() {
       <DummyModal open={renameOpen} title="Rename File" description={activeFile?.name ?? ''} onClose={() => setRenameOpen(false)}><form onSubmit={renameFile} className="grid gap-4"><Input value={renameValue} onChange={(event) => setRenameValue(event.target.value)} required /><div className="flex justify-end gap-3"><Button type="button" variant="outline" onClick={() => setRenameOpen(false)}>Cancel</Button><Button>Rename</Button></div></form></DummyModal>
       <DummyModal open={moveOpen} title="Move to Folder" description={activeFile?.name ?? ''} onClose={() => setMoveOpen(false)}><form onSubmit={moveFile} className="grid gap-4"><select className="h-11 rounded-xl border border-slate-200 px-3 text-sm" value={selectedFolderId} onChange={(event) => setSelectedFolderId(event.target.value)}><option value="">No folder</option>{folders.map((folder) => <option key={folder.id} value={folder.id}>{folder.name}</option>)}</select><div className="flex justify-end gap-3"><Button type="button" variant="outline" onClick={() => setMoveOpen(false)}>Cancel</Button><Button>Move</Button></div></form></DummyModal>
       <DummyModal open={deleteOpen} title="Delete File" description={`Delete ${activeFile?.name ?? 'file'} from Google Drive?`} onClose={() => setDeleteOpen(false)}><div className="flex justify-end gap-3"><Button variant="outline" onClick={() => setDeleteOpen(false)}>Cancel</Button><Button variant="danger" onClick={deleteFile}>Delete</Button></div></DummyModal>
-      <DummyModal open={folderRenameOpen} title="Rename Folder" description={activeFolder?.name ?? ''} onClose={() => setFolderRenameOpen(false)}><form onSubmit={renameFolder} className="grid gap-4"><Input value={folderRenameValue} onChange={(event) => setFolderRenameValue(event.target.value)} required /><div className="flex justify-end gap-3"><Button type="button" variant="outline" onClick={() => setFolderRenameOpen(false)}>Cancel</Button><Button>Rename</Button></div></form></DummyModal>
-      <DummyModal open={folderDeleteOpen} title="Delete Folder" description={`Delete virtual folder ${activeFolder?.name ?? ''}? Files inside will remain uploaded.`} onClose={() => setFolderDeleteOpen(false)}><div className="flex justify-end gap-3"><Button variant="outline" onClick={() => setFolderDeleteOpen(false)}>Cancel</Button><Button variant="danger" onClick={deleteFolder}>Delete</Button></div></DummyModal>
+      <DummyModal open={folderRenameOpen} title="Rename Folder" description={activeFolderForMenu?.name ?? ''} onClose={() => setFolderRenameOpen(false)}><form onSubmit={renameFolder} className="grid gap-4"><Input value={folderRenameValue} onChange={(event) => setFolderRenameValue(event.target.value)} required /><div className="flex justify-end gap-3"><Button type="button" variant="outline" onClick={() => setFolderRenameOpen(false)}>Cancel</Button><Button>Rename</Button></div></form></DummyModal>
+      <DummyModal open={folderDeleteOpen} title="Delete Folder" description={`Delete virtual folder ${activeFolderForMenu?.name ?? ''}? Files inside will remain uploaded.`} onClose={() => setFolderDeleteOpen(false)}><div className="flex justify-end gap-3"><Button variant="outline" onClick={() => setFolderDeleteOpen(false)}>Cancel</Button><Button variant="danger" onClick={deleteFolder}>Delete</Button></div></DummyModal>
       <DummyModal open={previewOpen} title="File Preview" description={activeFile?.name ?? ''} onClose={closePreview} className="max-w-5xl">
         <div className="overflow-hidden rounded-xl border border-slate-200 bg-slate-50">
           {activeFile?.mimeType?.startsWith('image/') ? <img src={previewUrl} alt={activeFile.name} className="max-h-[70vh] w-full object-contain" /> : null}

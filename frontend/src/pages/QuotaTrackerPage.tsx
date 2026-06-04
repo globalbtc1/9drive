@@ -26,6 +26,8 @@ export function QuotaTrackerPage() {
   const [accounts, setAccounts] = useState<ConnectedAccount[]>([])
   const [message, setMessage] = useState('')
   const [autoRefresh, setAutoRefresh] = useState(false)
+  const [refreshing, setRefreshing] = useState(false)
+  const [syncingAccountId, setSyncingAccountId] = useState<string | null>(null)
 
   async function load() {
     const [summaryData, accountData] = await Promise.all([
@@ -34,6 +36,15 @@ export function QuotaTrackerPage() {
     ])
     setSummary(summaryData)
     setAccounts(accountData.accounts)
+  }
+
+  async function refresh() {
+    setRefreshing(true)
+    try {
+      await load()
+    } finally {
+      setRefreshing(false)
+    }
   }
 
   useEffect(() => {
@@ -63,8 +74,13 @@ export function QuotaTrackerPage() {
   }
 
   async function sync(accountId: string) {
-    await apiFetch(`/connected-accounts/${accountId}/sync-quota`, { method: 'POST' })
-    await load()
+    setSyncingAccountId(accountId)
+    try {
+      await apiFetch(`/connected-accounts/${accountId}/sync-quota`, { method: 'POST' })
+      await load()
+    } finally {
+      setSyncingAccountId(null)
+    }
   }
 
   async function disconnect(accountId: string) {
@@ -74,7 +90,7 @@ export function QuotaTrackerPage() {
 
   return (
     <>
-      <PageHeader title="Quota Tracker" description="Track and manage connected provider storage limits." actions={<><Button variant="outline" onClick={() => setAutoRefresh(!autoRefresh)}><CheckCircle className="h-4 w-4" />Auto-refresh {autoRefresh ? 'On' : 'Off'}</Button><Button variant="outline" onClick={load}><RefreshCw className="h-4 w-4" />Refresh</Button><Button onClick={connectDrive}><Link2 className="h-4 w-4" />Connect Drive</Button></>} />
+      <PageHeader title="Quota Tracker" description="Track and manage connected provider storage limits." actions={<><Button variant="outline" onClick={() => setAutoRefresh(!autoRefresh)}><CheckCircle className="h-4 w-4" />Auto-refresh {autoRefresh ? 'On' : 'Off'}</Button><Button variant="outline" onClick={refresh} disabled={refreshing}><RefreshCw className={refreshing ? 'h-4 w-4 animate-spin' : 'h-4 w-4'} />{refreshing ? 'Refreshing...' : 'Refresh'}</Button><Button onClick={connectDrive}><Link2 className="h-4 w-4" />Connect Drive</Button></>} />
       {message ? <p className="mt-5 rounded-xl bg-blue-50 p-3 text-sm text-blue-700">{message}</p> : null}
 
       <div className="mt-8 grid gap-4 md:grid-cols-4">
@@ -108,7 +124,7 @@ export function QuotaTrackerPage() {
                   <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-blue-600 text-white"><Cloud className="h-6 w-6" /></div>
                   <div><h2 className="font-extrabold">Google Drive</h2><p className="text-sm text-slate-500">{account.email}</p></div>
                 </div>
-                <div className="flex gap-2"><Button variant="outline" size="icon" onClick={() => sync(account.id)}><RefreshCw className="h-5 w-5" /></Button><Button variant="danger" size="icon" onClick={() => disconnect(account.id)}><Trash2 className="h-5 w-5" /></Button></div>
+                <div className="flex gap-2"><Button variant="outline" size="icon" onClick={() => sync(account.id)} disabled={syncingAccountId === account.id}><RefreshCw className={syncingAccountId === account.id ? 'h-5 w-5 animate-spin' : 'h-5 w-5'} /></Button><Button variant="danger" size="icon" onClick={() => disconnect(account.id)}><Trash2 className="h-5 w-5" /></Button></div>
               </div>
               <div className="mt-6">
                 <div className="mb-2 flex items-center justify-between text-sm">
