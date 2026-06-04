@@ -305,6 +305,111 @@ Frontend runs at:
 http://localhost:5173
 ```
 
+## Docker Deployment
+
+This repository includes Docker files for running MySQL, backend, and frontend together.
+
+Files:
+
+```txt
+docker-compose.yml
+.env.docker.example
+backend/Dockerfile
+frontend/Dockerfile
+frontend/nginx.conf
+```
+
+### 1. Prepare Docker Env
+
+Copy the example env file:
+
+```bash
+cp .env.docker.example .env
+```
+
+On Windows PowerShell:
+
+```powershell
+Copy-Item .env.docker.example .env
+```
+
+Edit `.env`:
+
+```env
+MYSQL_ROOT_PASSWORD=root
+MYSQL_DATABASE=9drive
+
+FRONTEND_URL=http://localhost:5173
+VITE_API_URL=http://localhost:4000
+
+JWT_ACCESS_SECRET=replace-with-long-random-secret
+TOKEN_ENCRYPTION_KEY=replace-with-long-random-secret
+
+GOOGLE_CLIENT_ID=your-google-client-id
+GOOGLE_CLIENT_SECRET=your-google-client-secret
+GOOGLE_REDIRECT_URI=http://localhost:4000/connected-accounts/google/callback
+```
+
+### 2. Start Containers
+
+```bash
+docker compose up -d --build
+```
+
+Services:
+
+```txt
+frontend: http://localhost:5173
+backend:  http://localhost:4000
+mysql:    localhost:3306
+```
+
+The backend container runs Prisma migrations automatically on startup:
+
+```txt
+npx prisma migrate deploy
+```
+
+### 3. Seed Google OAuth Config In Docker
+
+After containers are running, seed the global Google OAuth config:
+
+```bash
+docker compose exec backend npm run seed:google-config
+```
+
+This stores `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and `GOOGLE_REDIRECT_URI` from Docker env into MySQL as encrypted global config.
+
+### 4. View Logs
+
+```bash
+docker compose logs -f backend
+docker compose logs -f frontend
+docker compose logs -f mysql
+```
+
+### 5. Stop Containers
+
+```bash
+docker compose down
+```
+
+Remove database volume too:
+
+```bash
+docker compose down -v
+```
+
+### Docker Production Notes
+
+- Replace localhost URLs with production domain.
+- Update Google OAuth authorized JavaScript origin.
+- Update Google OAuth redirect URI.
+- Use strong `JWT_ACCESS_SECRET` and `TOKEN_ENCRYPTION_KEY`.
+- Do not expose MySQL port publicly in production.
+- Put frontend/backend behind HTTPS reverse proxy.
+- Rebuild frontend when `VITE_API_URL` changes because Vite embeds env at build time.
+
 ## 8. Manual Test Flow
 
 1. Open frontend:
