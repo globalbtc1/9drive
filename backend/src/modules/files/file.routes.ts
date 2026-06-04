@@ -2,7 +2,9 @@ import { Router } from 'express'
 import { google } from 'googleapis'
 import { z } from 'zod'
 import { prisma } from '../../config/prisma.js'
+import { env } from '../../config/env.js'
 import { requireAuth, type AuthRequest } from '../../middleware/auth.middleware.js'
+import { hashToken, randomToken } from '../../utils/crypto.js'
 import { getAuthedGoogleClient, syncGoogleQuota } from '../google/google.service.js'
 
 export const fileRouter = Router()
@@ -39,6 +41,29 @@ fileRouter.patch('/:id', async (req: AuthRequest, res, next) => {
     if (body.name) await drive.files.update({ fileId: file.providerFileId, requestBody: { name: body.name } })
     const updated = await prisma.file.update({ where: { id: file.id }, data: { ...(body.name ? { name: body.name } : {}), ...(body.folderId !== undefined ? { folderId: body.folderId } : {}) }, include: { connectedAccount: { select: { id: true, email: true, provider: true } }, folder: { select: { id: true, name: true } } } })
     return res.json({ file: { ...updated, sizeBytes: updated.sizeBytes.toString() } })
+  } catch (error) {
+    return next(error)
+  }
+})
+
+fileRouter.post('/:id/share', async (req: AuthRequest, res, next) => {
+  try {
+    const fileId = String(req.params.id)
+    const file = await prisma.file.findFirstOrThrow({ where: { id: fileId, userId: req.user!.id, status: 'active' } })
+    await prisma.fileShare.updateMany({ where: { fileId: file.id, userId: req.user!.id, enabled: true }, data: { enabled: false } })
+    const token = randomToken(32)
+    const share = await prisma.fileShare.create({ data: { fileId: file.id, userId: req.user!.id, tokenHash: hashToken(token) } })
+    return res.status(201).json({ url: `${env.FRONTEND_URL}/public/files/${token}`, shareId: share.id })
+  } catch (error) {
+    return next(error)
+  }
+})
+
+fileRouter.delete('/:id/share', async (req: AuthRequest, res, next) => {
+  try {
+    const fileId = String(req.params.id)
+    await prisma.fileShare.updateMany({ where: { fileId, userId: req.user!.id, enabled: true }, data: { enabled: false } })
+    return res.json({ status: 'ok' })
   } catch (error) {
     return next(error)
   }

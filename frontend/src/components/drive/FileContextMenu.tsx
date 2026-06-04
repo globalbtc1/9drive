@@ -1,8 +1,8 @@
-import { Download, Edit3, Eye, FolderInput, Info, Trash2 } from 'lucide-react'
+import { Download, Edit3, Eye, FolderInput, Info, Link2, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import type { FileItem } from '@/data/drive-data'
 
-export function FileContextMenu({ x, y, file, onClose, onView, onDownload, onRename, onMove, onDetails, onDelete }: { x: number; y: number; file: FileItem | null; onClose: () => void; onView: () => void; onDownload: () => void; onRename: () => void; onMove: () => void; onDetails: () => void; onDelete: () => void }) {
+export function FileContextMenu({ x, y, file, onClose, onView, onDownload, onRename, onMove, onDetails, onShare, onDelete }: { x: number; y: number; file: FileItem | null; onClose: () => void; onView: () => void; onDownload: () => void; onRename: () => void; onMove: () => void; onDetails: () => void; onShare: () => void; onDelete: () => void }) {
   if (!file) return null
   const safeX = Math.max(12, Math.min(x, window.innerWidth - 220))
   const safeY = Math.max(12, Math.min(y, window.innerHeight - 332))
@@ -17,6 +17,7 @@ export function FileContextMenu({ x, y, file, onClose, onView, onDownload, onRen
         <Button variant="ghost" className="w-full justify-start" onClick={onRename}><Edit3 className="h-4 w-4" />Rename</Button>
         <Button variant="ghost" className="w-full justify-start" onClick={onMove}><FolderInput className="h-4 w-4" />Move to Folder</Button>
         <Button variant="ghost" className="w-full justify-start" onClick={onDetails}><Info className="h-4 w-4" />Details</Button>
+        <Button variant="ghost" className="w-full justify-start" onClick={onShare}><Link2 className="h-4 w-4" />Share Link</Button>
         <Button variant="danger" className="w-full justify-start" onClick={onDelete}><Trash2 className="h-4 w-4" />Delete</Button>
       </div>
     </>

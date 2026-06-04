@@ -11,6 +11,7 @@ import { RegisterPage } from '@/pages/RegisterPage'
 import { SettingsPage } from '@/pages/SettingsPage'
 import { SharedPage } from '@/pages/SharedPage'
 import { StarredPage } from '@/pages/StarredPage'
+import { PublicFilePage } from '@/pages/PublicFilePage'
 
 function App() {
   return (
@@ -18,6 +19,7 @@ function App() {
       <Route path="login" element={<LoginPage />} />
       <Route path="register" element={<RegisterPage />} />
       <Route path="google-connected" element={<GoogleConnectedPage />} />
+      <Route path="public/files/:token" element={<PublicFilePage />} />
       <Route element={<ProtectedRoute />}>
         <Route element={<DriveLayout />}>
           <Route index element={<Navigate to="/all-files" replace />} />

@@ -9,6 +9,7 @@ import { storageRouter } from './modules/storage/storage.routes.js'
 import { uploadRouter } from './modules/uploads/upload.routes.js'
 import { fileRouter } from './modules/files/file.routes.js'
 import { folderRouter } from './modules/folders/folder.routes.js'
+import { publicRouter } from './modules/public/public.routes.js'
 
 export const app = express()
 
@@ -16,6 +17,7 @@ app.use(cors({ origin: env.FRONTEND_URL }))
 app.use(express.json({ limit: '1mb' }))
 
 app.get('/health', (_req, res) => res.json({ status: 'ok' }))
+app.use('/public', publicRouter)
 app.use('/auth', authRouter)
 app.use('/provider-configs', providerConfigRouter)
 app.use('/connected-accounts', connectedAccountRouter)

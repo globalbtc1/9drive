@@ -20,6 +20,7 @@ model User {
   oauthStates    OauthState[]
   connectedAccounts ConnectedAccount[]
   files          File[]
+  fileShares     FileShare[]
   folders        Folder[]
   uploadSessions UploadSession[]
   auditLogs      AuditLog[]
@@ -140,12 +141,30 @@ model File {
   user               User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   connectedAccount   ConnectedAccount @relation(fields: [connectedAccountId], references: [id], onDelete: Cascade)
   folder             Folder?          @relation(fields: [folderId], references: [id], onDelete: SetNull)
+  shares             FileShare[]
 
   @@index([userId])
   @@index([connectedAccountId])
   @@index([folderId])
   @@index([providerFileId])
   @@map("files")
+}
+
+model FileShare {
+  id        String    @id @default(uuid()) @db.Char(36)
+  fileId    String    @map("file_id") @db.Char(36)
+  userId    String    @map("user_id") @db.Char(36)
+  tokenHash String    @unique @map("token_hash") @db.VarChar(255)
+  enabled   Boolean   @default(true)
+  expiresAt DateTime? @map("expires_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  file      File      @relation(fields: [fileId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([fileId])
+  @@index([userId])
+  @@map("file_shares")
 }
 
 model Folder {
