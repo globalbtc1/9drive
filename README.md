@@ -2,7 +2,7 @@
 
 # 9Drive
 
-9Drive is a storage gateway web app for connecting multiple Google Drive accounts into one virtual storage dashboard. Users can connect Google Drive accounts, track quota, upload files, organize files with virtual folders, preview files, and let the backend route uploads to the Drive account with enough free space.
+9Drive is a storage gateway web app for connecting multiple Google Drive accounts into one virtual storage dashboard. Users can register with email/password or Google, automatically connect their first Google Drive account during Google sign-in, track quota, upload files into a dedicated `9drive` Drive folder, organize files with virtual folders, preview files, sync MySQL from Google Drive, and let the backend route uploads to the Drive account with enough free space.
 
 ## Features
 
@@ -10,9 +10,12 @@
 - Express + TypeScript backend.
 - MySQL database with Prisma migrations.
 - Bearer token authentication.
-- Google OAuth login for connected Drive accounts.
+- Email/password auth plus Google sign-in/register with automatic first Drive connection.
 - Global Google OAuth config stored encrypted in DB.
+- Optional reCAPTCHA on email/password registration.
 - Direct upload stream to Google Drive. Files are not stored on the server.
+- Google Drive uploads are stored under a root `9drive` folder.
+- Manual sync from the Google Drive `9drive` folder back into MySQL.
 - Multi-account storage quota summary.
 - Quota tracker page.
 - Virtual folders.
@@ -104,6 +107,7 @@ TOKEN_ENCRYPTION_KEY="change-this-encryption-key-32bytes!"
 ACCESS_TOKEN_TTL_SECONDS=900
 REFRESH_TOKEN_TTL_DAYS=30
 MAX_UPLOAD_BYTES=5368709120
+RECAPTCHA_SECRET_KEY=""
 
 # Used only by `npm run seed:google-config`.
 # These values are encrypted and stored in DB as global Google OAuth config.
@@ -125,7 +129,10 @@ Create or confirm `frontend/.env`:
 
 ```env
 VITE_API_URL=http://localhost:4000
+VITE_RECAPTCHA_SITE_KEY=
 ```
+
+Captcha is disabled when `VITE_RECAPTCHA_SITE_KEY` or backend `RECAPTCHA_SECRET_KEY` is empty. Set both values to enable captcha on registration.
 
 ## 5. Run Prisma Migrations
 
@@ -212,10 +219,12 @@ Developer contact email
 4. Add scopes:
 
 ```txt
-https://www.googleapis.com/auth/drive.file
+https://www.googleapis.com/auth/drive
 https://www.googleapis.com/auth/userinfo.email
 https://www.googleapis.com/auth/userinfo.profile
 ```
+
+Full Drive access is required so Google sign-in can connect the first Drive account automatically and sync files manually added to the `9drive` folder.
 
 5. If publishing status is `Testing`, add test users.
 
@@ -289,7 +298,7 @@ cd backend
 npm run seed:google-config
 ```
 
-This stores the Google OAuth config as a global encrypted provider config in MySQL. Users only need to click `Connect Drive` in the frontend.
+This stores the Google OAuth config as a global encrypted provider config in MySQL. Google sign-in uses the same config and automatically connects the first Drive account. Logged-in users can still click `Connect Drive` in Settings to add more Drive accounts.
 
 ## 7. Run Development Servers
 
@@ -355,14 +364,18 @@ MYSQL_DATABASE=9drive
 
 FRONTEND_URL=http://localhost:5173
 VITE_API_URL=http://localhost:4000
+VITE_RECAPTCHA_SITE_KEY=
 
 JWT_ACCESS_SECRET=replace-with-long-random-secret
 TOKEN_ENCRYPTION_KEY=replace-with-long-random-secret
+RECAPTCHA_SECRET_KEY=
 
 GOOGLE_CLIENT_ID=your-google-client-id
 GOOGLE_CLIENT_SECRET=your-google-client-secret
 GOOGLE_REDIRECT_URI=http://localhost:4000/connected-accounts/google/callback
 ```
+
+Captcha is disabled when either `VITE_RECAPTCHA_SITE_KEY` or `RECAPTCHA_SECRET_KEY` is empty.
 
 ### 2. Start Containers
 
@@ -423,6 +436,7 @@ docker compose down -v
 - Do not expose MySQL port publicly in production.
 - Put frontend/backend behind HTTPS reverse proxy.
 - Rebuild frontend when `VITE_API_URL` changes because Vite embeds env at build time.
+- Rebuild frontend when `VITE_RECAPTCHA_SITE_KEY` changes because Vite embeds env at build time.
 
 ## 8. Manual Test Flow
 
@@ -432,20 +446,17 @@ docker compose down -v
 http://localhost:5173
 ```
 
-2. Register a user.
-3. Open `Settings`.
-4. Click `Connect Drive`.
-5. Google OAuth popup opens.
-6. Approve access.
-7. Popup closes.
-8. Connected Google account appears.
-9. Open `Quota Tracker`.
-10. Confirm quota appears.
-11. Open `All Files`.
-12. Create a virtual folder.
-13. Upload a file.
-14. Watch bottom-right upload progress.
-15. Right-click file row for actions:
+2. Register a user with email/password and captcha, or click `Continue with Google and connect Drive`.
+3. If using Google sign-in, approve Drive access once and confirm `/settings` already shows the connected account.
+4. If using email/password, open `Settings`, click `Connect Drive`, approve access, and confirm the account appears.
+5. Open `Quota Tracker`.
+6. Confirm quota appears.
+7. Open `All Files`.
+8. Create nested virtual folders.
+9. Upload a file and confirm it appears under Google Drive root folder `9drive`.
+10. Add or remove a file manually inside Google Drive folder `9drive`, then click `Sync Drive` in All Files.
+11. Watch bottom-right upload progress.
+12. Right-click file row for actions:
 
 ```txt
 View
@@ -462,6 +473,9 @@ Auth:
 ```txt
 POST /auth/register
 POST /auth/login
+GET /auth/google/url
+GET /auth/google/callback
+POST /auth/google/exchange
 POST /auth/refresh
 POST /auth/logout
 GET /auth/me
@@ -496,11 +510,21 @@ Files:
 
 ```txt
 GET /files
+GET /files?folderId=<id>
+GET /files?q=<search>
+GET /files/shared-links
 GET /files/:id
 PATCH /files/:id
+PATCH /files/batch
+DELETE /files/batch
+POST /files/sync-google
+POST /files/:id/share
+DELETE /files/:id/share
+POST /files/:id/preview-token
 GET /files/:id/view-url
 GET /files/:id/download
 DELETE /files/:id
+GET /files/preview/:token
 ```
 
 Uploads:
@@ -522,11 +546,12 @@ file
 ## Security Notes
 
 - Backend never stores uploaded files on disk.
-- Uploads are streamed through the backend to Google Drive.
+- Uploads are streamed through the backend to Google Drive folder `9drive`.
 - Google tokens are encrypted in MySQL.
 - Refresh tokens for app sessions are hashed in MySQL.
+- Google auth handoff tokens, public share tokens, and preview tokens are hashed before lookup/use.
 - `backend/.env` is ignored by git.
-- Do not expose `TOKEN_ENCRYPTION_KEY` or `JWT_ACCESS_SECRET`.
+- Do not expose `TOKEN_ENCRYPTION_KEY`, `JWT_ACCESS_SECRET`, `RECAPTCHA_SECRET_KEY`, OAuth client secrets, or raw share/preview/handoff tokens.
 
 ## Production Notes
 

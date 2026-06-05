@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-9Drive is a Google Drive storage gateway. It lets users register/login, connect one or more Google Drive accounts, track combined quota, upload files through the backend, organize files in virtual folders, preview/download/share files, invite other users to files/folders, and route uploads to a connected Drive account with enough free space.
+9Drive is a Google Drive storage gateway. It lets users register/login with email/password or Google, automatically connect the first Drive account during Google sign-in, connect additional Google Drive accounts, track combined quota, upload files through the backend into a dedicated Google Drive `9drive` folder, organize files in virtual folders, preview/download/share files, sync MySQL file records from Google Drive, invite other users to files/folders, and route uploads to a connected Drive account with enough free space.
 
 ## Repository Structure
 
@@ -60,6 +60,7 @@ Environment:
 - `FRONTEND_URL`
 - `JWT_ACCESS_SECRET`
 - `TOKEN_ENCRYPTION_KEY`
+- `RECAPTCHA_SECRET_KEY` (optional; enables captcha verification when paired with frontend site key)
 - `ACCESS_TOKEN_TTL_SECONDS`
 - `REFRESH_TOKEN_TTL_DAYS`
 - `MAX_UPLOAD_BYTES`
@@ -79,14 +80,16 @@ Backend conventions:
 - Convert `bigint` values to strings before sending JSON responses.
 - Keep Google-specific OAuth/Drive behavior in provider modules/services when possible.
 - Keep public-token routes outside `requireAuth`; verify token hash, status, and expiry before streaming/returning data.
+- Google sign-in/register uses one-time auth handoff tokens; never send app access/refresh tokens through URL query params.
+- Email/password registration verifies reCAPTCHA only when `RECAPTCHA_SECRET_KEY` is configured.
 
 Security rules:
 - Never commit `.env` files or secrets.
 - Never log access tokens, refresh tokens, OAuth client secrets, JWT secrets, encryption keys, or raw public share tokens.
 - Google tokens are encrypted before database storage.
 - App refresh tokens are hashed before database storage.
-- Share and preview tokens are stored as hashes where applicable.
-- Uploaded files must stream through backend to Google Drive; do not store uploaded files on disk.
+- Auth handoff, share, and preview tokens are stored as hashes where applicable.
+- Uploaded files must stream through backend to Google Drive folder `9drive`; do not store uploaded files on disk.
 - Keep CORS restricted by `FRONTEND_URL`.
 - Keep auth/token storage behavior centralized; do not change without explicit reason.
 
@@ -117,7 +120,9 @@ Important files:
 - `frontend/src/pages/SharedPage.tsx`: shared links and invites UI.
 - `frontend/src/pages/QuotaTrackerPage.tsx`: connected-account quota UI.
 - `frontend/src/pages/SettingsPage.tsx`: Google account/settings UI.
+- `frontend/src/pages/GoogleAuthPage.tsx`: Google auth handoff exchange page.
 - `frontend/src/pages/PublicFilePage.tsx`: public shared file viewer/embed page.
+- `frontend/src/components/auth/GoogleLogo.tsx`: Google button logo.
 - `frontend/src/components/drive/**`: drive-specific UI components.
 - `frontend/src/components/ui/**`: reusable UI primitives.
 - `frontend/src/lib/api.ts`: API helper, token refresh retry, formatting utilities.
@@ -132,6 +137,7 @@ Commands:
 
 Environment:
 - `VITE_API_URL`: backend base URL. Vite embeds this at build time.
+- `VITE_RECAPTCHA_SITE_KEY`: optional reCAPTCHA site key. Vite embeds this at build time; blank disables captcha UI.
 
 Frontend conventions:
 - Use `@/*` imports for files under `frontend/src`.
@@ -154,6 +160,9 @@ General:
 Auth:
 - `POST /auth/register`
 - `POST /auth/login`
+- `GET /auth/google/url`
+- `GET /auth/google/callback`
+- `POST /auth/google/exchange`
 - `POST /auth/refresh`
 - `POST /auth/logout`
 - `GET /auth/me`
@@ -192,6 +201,7 @@ Files:
 - `PATCH /files/:id`
 - `PATCH /files/batch`
 - `DELETE /files/batch`
+- `POST /files/sync-google`
 - `POST /files/:id/share`
 - `DELETE /files/:id/share`
 - `POST /files/:id/preview-token`
@@ -216,6 +226,8 @@ Uploads:
 - Current frontend sends metadata first as `filesMeta`: JSON array of `{ fieldName, fileName, mimeType, sizeBytes, folderId? }`.
 - File fields then match `filesMeta[*].fieldName`, e.g. `file-0`, `file-1`.
 - Backend selects a connected Drive account with enough available quota and streams each file directly to Google Drive.
+- Google Drive uploads are placed under the root Drive folder named `9drive`; virtual folders remain app/database-only.
+- `POST /files/sync-google` treats Google Drive folder `9drive` as source of truth for physical files: create missing MySQL file rows, update changed metadata, and mark missing Drive files as deleted.
 
 ## Docker
 
