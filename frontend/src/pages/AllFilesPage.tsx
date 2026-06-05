@@ -518,12 +518,12 @@ export function AllFilesPage() {
           <div className="flex justify-end gap-3 pt-2"><Button type="button" variant="outline" onClick={() => setInviteOpen(false)}>Cancel</Button><Button disabled={inviting}>{inviting ? 'Sending...' : 'Send Invite'}</Button></div>
         </form>
       </DummyModal>
-      <DummyModal open={previewOpen} title="File Preview" description={activeFile?.name ?? ''} onClose={closePreview} className="max-w-5xl overflow-hidden">
+      <DummyModal open={previewOpen} title="File Preview" description={activeFile?.name ?? ''} onClose={closePreview} className="overflow-hidden sm:max-w-[95vw] xl:max-w-[1400px]">
         <div className="overflow-hidden rounded-xl border border-slate-200 bg-slate-50">
-          {activePreviewKind === 'image' ? <img src={previewUrl} alt={activeFile?.name ?? 'File preview'} className="max-h-[70vh] w-full object-contain" /> : null}
+          {activePreviewKind === 'image' ? <img src={previewUrl} alt={activeFile?.name ?? 'File preview'} className="max-h-[72dvh] w-full object-contain sm:max-h-[80vh]" /> : null}
           {activePreviewKind === 'video' ? <div className="drive-preview-video-shell"><video ref={previewVideoRef} controls playsInline preload="metadata"><source src={previewUrl} type={activeFile?.mimeType} /></video></div> : null}
-          {activePreviewKind === 'document' ? <iframe src={previewUrl} title={activeFile?.name ?? 'File preview'} className="h-[70vh] w-full" /> : null}
-          {activePreviewKind === 'office' ? <iframe src={officeViewerUrl(previewUrl)} title={activeFile?.name ?? 'File preview'} className="h-[70vh] w-full bg-white" /> : null}
+          {activePreviewKind === 'document' ? <iframe src={previewUrl} title={activeFile?.name ?? 'File preview'} className="h-[72dvh] w-full sm:h-[80vh]" /> : null}
+          {activePreviewKind === 'office' ? <iframe src={officeViewerUrl(previewUrl)} title={activeFile?.name ?? 'File preview'} className="h-[72dvh] w-full bg-white sm:h-[80vh]" /> : null}
           {!activePreviewKind ? <div className="p-6 text-center text-sm text-slate-500">Preview not available for this file type. Use Download instead.</div> : null}
         </div>
       </DummyModal>
