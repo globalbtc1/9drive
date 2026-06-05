@@ -11,6 +11,17 @@ uploadRouter.use(requireAuth)
 
 type UploadMeta = { fieldName: string; fileName: string; mimeType: string; sizeBytes: bigint; folderId?: string }
 
+function logUpload(message: string, metadata?: Record<string, unknown>) {
+  console.info('[upload]', message, metadata ?? '')
+}
+
+function syncQuotaInBackground(accountId: string, sessionId: string) {
+  logUpload('quota sync started', { accountId, sessionId })
+  syncGoogleQuota(accountId)
+    .then(() => logUpload('quota sync completed', { accountId, sessionId }))
+    .catch((error) => logUpload('quota sync failed', { accountId, sessionId, message: error instanceof Error ? error.message : 'Unknown error' }))
+}
+
 async function selectAccount(userId: string, sizeBytes: bigint, reservedBytesByAccount = new Map<string, bigint>()) {
   const accounts = await prisma.connectedAccount.findMany({
     where: { userId, provider: 'google_drive', status: 'connected' },
@@ -33,6 +44,7 @@ async function selectAccount(userId: string, sizeBytes: bigint, reservedBytesByA
 
 uploadRouter.post('/', async (req: AuthRequest, res, next) => {
   try {
+    logUpload('request started', { userId: req.user!.id, contentLength: req.headers['content-length'] })
     const contentType = req.headers['content-type']
     if (!contentType?.includes('multipart/form-data')) return res.status(400).json({ code: 'UPLOAD_INVALID_CONTENT_TYPE', message: 'multipart/form-data required.' })
 
@@ -73,6 +85,7 @@ uploadRouter.post('/', async (req: AuthRequest, res, next) => {
       const meta = metaForFile(fieldName, info)
       const fileName = meta?.fileName || info.filename
       try {
+        fileStream.on('limit', () => logUpload('file stream size limit reached', { fileName }))
         if (!meta?.sizeBytes || meta.sizeBytes <= 0n) {
           fileStream.resume()
           failed.push({ fileName, code: 'UPLOAD_SIZE_REQUIRED', message: 'sizeBytes field must be sent before file field.' })
@@ -96,6 +109,7 @@ uploadRouter.post('/', async (req: AuthRequest, res, next) => {
         if (folderId) await prisma.folder.findFirstOrThrow({ where: { id: folderId, userId: req.user!.id, deletedAt: null } })
 
         const session = await prisma.uploadSession.create({ data: { userId: req.user!.id, targetConnectedAccountId: account.id, fileName, mimeType: meta.mimeType, sizeBytes: meta.sizeBytes, status: 'uploading' } })
+        logUpload('file upload started', { sessionId: session.id, accountId: account.id, fileName, sizeBytes: meta.sizeBytes.toString() })
         const auth = await getAuthedGoogleClient(account)
         const drive = google.drive({ version: 'v3', auth })
 
@@ -109,6 +123,7 @@ uploadRouter.post('/', async (req: AuthRequest, res, next) => {
           media: { mimeType: meta.mimeType, body: fileStream },
           fields: 'id,name,mimeType,size',
         })
+        logUpload('google upload completed', { sessionId: session.id, accountId: account.id, fileName })
 
         if (streamedBytes !== meta.sizeBytes) {
           await prisma.uploadSession.update({ where: { id: session.id }, data: { status: 'failed', errorMessage: 'Streamed byte count did not match declared size.' } })
@@ -128,11 +143,13 @@ uploadRouter.post('/', async (req: AuthRequest, res, next) => {
             sizeBytes: meta.sizeBytes,
           },
         })
+        logUpload('database file created', { sessionId: session.id, fileId: file.id, accountId: account.id })
         await prisma.uploadSession.update({ where: { id: session.id }, data: { status: 'completed', completedAt: new Date() } })
-        await syncGoogleQuota(account.id)
         completed.push({ ...file, sizeBytes: file.sizeBytes.toString() })
+        syncQuotaInBackground(account.id, session.id)
       } catch (error) {
         fileStream.resume()
+        logUpload('file upload failed', { fileName, message: error instanceof Error ? error.message : 'Upload failed' })
         failed.push({ fileName, code: 'UPLOAD_FAILED', message: error instanceof Error ? error.message : 'Upload failed' })
       }
     }
@@ -150,11 +167,20 @@ uploadRouter.post('/', async (req: AuthRequest, res, next) => {
       pendingUploads.push(uploadOne(name, fileStream, info))
     })
 
+    busboy.on('error', (error) => {
+      logUpload('multipart parser failed', { message: error instanceof Error ? error.message : 'Unknown error' })
+      if (!responded) {
+        responded = true
+        next(error)
+      }
+    })
+
     busboy.on('finish', () => {
       if (!responded && !fileSeen) return fail(400, 'UPLOAD_FILE_REQUIRED', 'file field required.')
       Promise.all(pendingUploads).then(() => {
         if (responded) return
         responded = true
+        logUpload('response sent', { completed: completed.length, failed: failed.length })
         if (completed.length === 0) return res.status(400).json({ code: failed[0]?.code ?? 'UPLOAD_FAILED', message: failed[0]?.message ?? 'Upload failed', failed })
         if (!batchMeta && completed.length === 1 && failed.length === 0) return res.status(201).json({ file: completed[0] })
         return res.status(201).json({ files: completed, failed })
