@@ -5,6 +5,13 @@ import { requireAuth, type AuthRequest } from '../../middleware/auth.middleware.
 export const storageRouter = Router()
 storageRouter.use(requireAuth)
 
+type BreakdownRow = { kind: string; bytes: bigint | number | string | null }
+
+function bytesToString(value: bigint | number | string | null | undefined) {
+  if (value === null || value === undefined) return '0'
+  return value.toString()
+}
+
 storageRouter.get('/summary', async (req: AuthRequest, res, next) => {
   try {
     const accounts = await prisma.connectedAccount.findMany({ where: { userId: req.user!.id, status: 'connected' }, include: { storageAccount: true } })
@@ -31,6 +38,30 @@ storageRouter.get('/summary', async (req: AuthRequest, res, next) => {
         lastSyncedAt: account.storageAccount?.lastSyncedAt ?? null,
       })),
     })
+  } catch (error) {
+    return next(error)
+  }
+})
+
+storageRouter.get('/breakdown', async (req: AuthRequest, res, next) => {
+  try {
+    const rows = await prisma.$queryRaw<BreakdownRow[]>`
+      SELECT
+        CASE
+          WHEN mime_type LIKE 'image/%' THEN 'photo'
+          WHEN mime_type LIKE 'video/%' THEN 'video'
+          ELSE 'document'
+        END AS kind,
+        COALESCE(SUM(size_bytes), 0) AS bytes
+      FROM files
+      WHERE user_id = ${req.user!.id} AND status = 'active'
+      GROUP BY kind
+    `
+    const breakdown = { photo: '0', video: '0', document: '0' }
+    for (const row of rows) {
+      if (row.kind === 'photo' || row.kind === 'video' || row.kind === 'document') breakdown[row.kind] = bytesToString(row.bytes)
+    }
+    return res.json(breakdown)
   } catch (error) {
     return next(error)
   }

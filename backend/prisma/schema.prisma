@@ -43,6 +43,7 @@ model UserSession {
   user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+  @@index([refreshTokenHash])
   @@map("user_sessions")
 }
 
@@ -107,6 +108,7 @@ model ConnectedAccount {
 
   @@unique([userId, provider, providerAccountId])
   @@index([userId])
+  @@index([userId, status, createdAt])
   @@map("connected_accounts")
 }
 
@@ -147,6 +149,8 @@ model File {
   previewTokens      FilePreviewToken[]
 
   @@index([userId])
+  @@index([userId, status, createdAt])
+  @@index([userId, status, folderId, createdAt])
   @@index([connectedAccountId])
   @@index([folderId])
   @@index([providerFileId])
@@ -168,6 +172,8 @@ model FileShare {
 
   @@index([fileId])
   @@index([userId])
+  @@index([userId, enabled, createdAt])
+  @@index([fileId, userId, enabled, createdAt])
   @@map("file_shares")
 }
 
@@ -205,6 +211,8 @@ model Folder {
   files              File[]
 
   @@index([userId])
+  @@index([userId, deletedAt, updatedAt])
+  @@index([userId, deletedAt, parentId, updatedAt])
   @@index([parentId])
   @@index([connectedAccountId])
   @@map("folders")

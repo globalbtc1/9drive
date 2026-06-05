@@ -37,9 +37,9 @@ type StorageSummary = {
 }
 
 type StorageBreakdown = {
-  photo: number
-  video: number
-  document: number
+  photo: string
+  video: string
+  document: string
 }
 
 function Sidebar({ onNavigate, user, storage, breakdown, onLogout }: { onNavigate?: () => void; user: AuthUser | null; storage: StorageSummary | null; breakdown: StorageBreakdown; onLogout: () => void }) {
@@ -116,21 +116,12 @@ export function DriveLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [user, setUser] = useState<AuthUser | null>(getStoredUser())
   const [storage, setStorage] = useState<StorageSummary | null>(null)
-  const [breakdown, setBreakdown] = useState<StorageBreakdown>({ photo: 0, video: 0, document: 0 })
+  const [breakdown, setBreakdown] = useState<StorageBreakdown>({ photo: '0', video: '0', document: '0' })
 
   async function loadSidebarStats() {
     await Promise.all([
       apiFetch<StorageSummary>('/storage/summary').then(setStorage),
-      apiFetch<{ files: Array<{ mimeType: string; sizeBytes: string }> }>('/files').then((data) => {
-        const next = { photo: 0, video: 0, document: 0 }
-        for (const file of data.files) {
-          const size = Number(file.sizeBytes)
-          if (file.mimeType.startsWith('image/')) next.photo += size
-          else if (file.mimeType.startsWith('video/')) next.video += size
-          else next.document += size
-        }
-        setBreakdown(next)
-      }),
+      apiFetch<StorageBreakdown>('/storage/breakdown').then(setBreakdown),
     ])
   }
 
